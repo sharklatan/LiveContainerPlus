@@ -191,7 +191,7 @@ struct LCTweakFolderView : View {
                 renameFileInput.close(result: "")
             }
         )
-        .betterFileImporter(isPresented: $choosingTweak, types: [.dylib, .lcFramework, /*.deb*/], multiple: true, callback: { fileUrls in
+        .betterFileImporter(isPresented: $choosingTweak, types: [.dylib, .lcFramework, .deb], multiple: true, callback: { fileUrls in
             Task { await startInstallTweak(fileUrls) }
         }, onDismiss: {
             choosingTweak = false
@@ -324,28 +324,166 @@ struct LCTweakFolderView : View {
     func startInstallTweak(_ urls: [URL]) async {
         do {
             let fm = FileManager()
-            // we will sign later before app launch
             
             for fileUrl in urls {
-                // handle deb file
-                if(!fileUrl.isFileURL) {
+                // Check if it's a valid file URL
+                if !fileUrl.isFileURL {
                     throw "lc.tweakView.notFileError %@".localizeWithFormat(fileUrl.lastPathComponent)
                 }
-                let toPath = self.baseUrl.appendingPathComponent(fileUrl.lastPathComponent)
-                try fm.moveItem(at: fileUrl, to: toPath)
-                LCParseMachO((toPath.path as NSString).utf8String, false) { path, header, _, _ in
-                    LCPatchAddRPath(path, header);
+                
+                let fileName = fileUrl.lastPathComponent
+                let isDebFile = fileName.lowercased().hasSuffix(".deb")
+                
+                if isDebFile {
+                    // Handle .deb file
+                    try await procesDebFile(fileUrl)
+                } else {
+                    // Handle .dylib or .framework file
+                    let toPath = self.baseUrl.appendingPathComponent(fileName)
+                    try fm.moveItem(at: fileUrl, to: toPath)
+                    
+                    // Apply Mach-O patching for Substrate references
+                    if fileName.lowercased().hasSuffix(".dylib") {
+                        patchTweakSubstrateLoad(toPath)
+                        copyCydiaSubstrateFramework(toPath)
+                    }
+                    
+                    // Add to Mach-O utilities
+                    LCParseMachO((toPath.path as NSString).utf8String, false) { path, header, _, _ in
+                        LCPatchAddRPath(path, header)
+                    }
+                    
+                    let isFramework = toPath.lastPathComponent.hasSuffix(".framework")
+                    let isTweak = toPath.lastPathComponent.hasSuffix(".dylib")
+                    self.tweakItems.append(LCTweakItem(fileUrl: toPath, isFolder: false, isFramework: isFramework, isTweak: isTweak))
                 }
-
-                let isFramework = toPath.lastPathComponent.hasSuffix(".framework")
-                let isTweak = toPath.lastPathComponent.hasSuffix(".dylib")
-                self.tweakItems.append(LCTweakItem(fileUrl: toPath, isFolder: false, isFramework: isFramework, isTweak: isTweak))
             }
         } catch {
             errorInfo = error.localizedDescription
             errorShow = true            
             return
         }
+    }
+    
+    func procesDebFile(_ debUrl: URL) async throws {
+        let fm = FileManager()
+        
+        // Create temporary directory for extraction
+        let tempDir = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        
+        defer {
+            try? fm.removeItem(at: tempDir)
+        }
+        
+        // Extract DEB using the C function
+        var error: NSError?
+        let debPath = (debUrl.path as NSString).utf8String
+        let tempPath = (tempDir.path as NSString).utf8String
+        
+        guard LCExtractDebPackage(debPath, tempPath, &error) else {
+            throw error ?? NSError(domain: "LCTweakPatcher", code: -1, 
+                                  userInfo: [NSLocalizedDescriptionKey: "Failed to extract DEB package"])
+        }
+        
+        // Extract tar.gz/tar.bz2 etc from the data archive
+        try extractTarGzContent(tempDir: tempDir, destinationDir: self.baseUrl)
+    }
+    
+    func extractTarGzContent(tempDir: URL, destinationDir: URL) throws {
+        let fm = FileManager()
+        
+        // Find data.tar.* file
+        let files = try fm.contentsOfDirectory(atPath: tempDir.path)
+        guard let dataArchive = files.first(where: { $0.hasPrefix("data.tar") }) else {
+            throw NSError(domain: "LCTweakPatcher", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "data.tar not found in extraction"])
+        }
+        
+        let dataArchivePath = tempDir.appendingPathComponent(dataArchive)
+        
+        // Try to decompress using available utilities
+        let extractPath = tempDir.appendingPathComponent("extracted")
+        try fm.createDirectory(at: extractPath, withIntermediateDirectories: true)
+        
+        // Use tar command to extract (available on iOS)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        
+        // Detect compression type and set appropriate flags
+        if dataArchive.hasSuffix(".gz") {
+            process.arguments = ["-xzf", dataArchivePath.path, "-C", extractPath.path]
+        } else if dataArchive.hasSuffix(".bz2") {
+            process.arguments = ["-xjf", dataArchivePath.path, "-C", extractPath.path]
+        } else {
+            process.arguments = ["-xf", dataArchivePath.path, "-C", extractPath.path]
+        }
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        if process.terminationStatus != 0 {
+            throw NSError(domain: "LCTweakPatcher", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "Failed to extract tar archive"])
+        }
+        
+        // Find and process extracted dylibs
+        try procesExtractedTweaks(extractPath: extractPath, destinationDir: destinationDir)
+    }
+    
+    func procesExtractedTweaks(extractPath: URL, destinationDir: URL) throws {
+        let fm = FileManager()
+        let enumerator = fm.enumerator(atPath: extractPath.path)
+        
+        var extractedDylibs: [URL] = []
+        
+        // Find all .dylib files
+        for case let file as String in enumerator ?? [] {
+            if file.hasSuffix(".dylib") {
+                let filePath = extractPath.appendingPathComponent(file)
+                extractedDylibs.append(filePath)
+            }
+        }
+        
+        if extractedDylibs.isEmpty {
+            throw NSError(domain: "LCTweakPatcher", code: -1,
+                         userInfo: [NSLocalizedDescriptionKey: "No dylib found in DEB package"])
+        }
+        
+        // Copy each dylib to destination and patch it
+        for dylibPath in extractedDylibs {
+            let fileName = dylibPath.lastPathComponent
+            var destPath = destinationDir.appendingPathComponent(fileName)
+            
+            // Avoid overwriting
+            if fm.fileExists(atPath: destPath.path) {
+                let baseName = fileName.deletingPathExtension
+                let ext = fileName.pathExtension
+                let newName = baseName + "_imported." + ext
+                destPath = destinationDir.appendingPathComponent(newName)
+            }
+            
+            try fm.copyItem(at: dylibPath, to: destPath)
+            
+            // Patch the dylib
+            patchTweakSubstrateLoad(destPath)
+            copyCydiaSubstrateFramework(destinationDir)
+            
+            // Add to UI
+            let isFramework = destPath.lastPathComponent.hasSuffix(".framework")
+            let isTweak = destPath.lastPathComponent.hasSuffix(".dylib")
+            self.tweakItems.append(LCTweakItem(fileUrl: destPath, isFolder: false, isFramework: isFramework, isTweak: isTweak))
+        }
+    }
+    
+    func patchTweakSubstrateLoad(_ url: URL) {
+        let path = (url.path as NSString).utf8String
+        _ = LCPatchTweakSubstrateLoad(path)
+    }
+    
+    func copyCydiaSubstrateFramework(_ url: URL) {
+        let path = (url.path as NSString).utf8String
+        _ = LCCopyCydiaSubstrateFramework(path)
     }
 }
 

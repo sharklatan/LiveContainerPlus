@@ -17,3 +17,8 @@ struct mach_header_64 *LCGetLoadedImageHeader(int i0, const char* name);
 NSString* getEntitlementXML(struct mach_header_64* header, void** entitlementXMLPtrOut);
 NSString* getLCEntitlementXML(void);
 bool checkCodeSignature(const char* path);
+
+// Tweak patching utilities
+BOOL LCPatchTweakSubstrateLoad(const char *dylibPath);
+BOOL LCExtractDebPackage(const char *debPath, const char *destinationPath, NSError **error);
+BOOL LCCopyCydiaSubstrateFramework(const char *destinationPath);
