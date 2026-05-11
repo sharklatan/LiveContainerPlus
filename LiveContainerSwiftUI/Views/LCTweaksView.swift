@@ -8,6 +8,7 @@
 import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
+import Combine
 
 struct LCTweakItem : Hashable {
     let fileUrl: URL
@@ -406,23 +407,28 @@ struct LCTweakFolderView : View {
         let extractPath = tempDir.appendingPathComponent("extracted")
         try fm.createDirectory(at: extractPath, withIntermediateDirectories: true)
         
-        // Use tar command to extract (available on iOS)
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/tar")
+        // Build tar command with appropriate flags
+        var tarCommand = "/usr/bin/tar"
+        var args: [String] = []
         
         // Detect compression type and set appropriate flags
         if dataArchive.hasSuffix(".gz") {
-            process.arguments = ["-xzf", dataArchivePath.path, "-C", extractPath.path]
+            args = ["-xzf", dataArchivePath.path, "-C", extractPath.path]
         } else if dataArchive.hasSuffix(".bz2") {
-            process.arguments = ["-xjf", dataArchivePath.path, "-C", extractPath.path]
+            args = ["-xjf", dataArchivePath.path, "-C", extractPath.path]
         } else {
-            process.arguments = ["-xf", dataArchivePath.path, "-C", extractPath.path]
+            args = ["-xf", dataArchivePath.path, "-C", extractPath.path]
         }
         
-        try process.run()
-        process.waitUntilExit()
+        // Use Foundation's Task API which is more concurrency-friendly
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: tarCommand)
+        task.arguments = args
         
-        if process.terminationStatus != 0 {
+        try task.run()
+        task.waitUntilExit()
+        
+        if task.terminationStatus != 0 {
             throw NSError(domain: "LCTweakPatcher", code: -1,
                          userInfo: [NSLocalizedDescriptionKey: "Failed to extract tar archive"])
         }
@@ -433,15 +439,16 @@ struct LCTweakFolderView : View {
     
     func procesExtractedTweaks(extractPath: URL, destinationDir: URL) throws {
         let fm = FileManager()
-        let enumerator = fm.enumerator(atPath: extractPath.path)
         
         var extractedDylibs: [URL] = []
         
         // Find all .dylib files
-        for case let file as String in enumerator ?? [] {
-            if file.hasSuffix(".dylib") {
-                let filePath = extractPath.appendingPathComponent(file)
-                extractedDylibs.append(filePath)
+        if let enumerator = fm.enumerator(atPath: extractPath.path) {
+            for case let file as String in enumerator {
+                if file.hasSuffix(".dylib") {
+                    let filePath = extractPath.appendingPathComponent(file)
+                    extractedDylibs.append(filePath)
+                }
             }
         }
         
@@ -457,8 +464,9 @@ struct LCTweakFolderView : View {
             
             // Avoid overwriting
             if fm.fileExists(atPath: destPath.path) {
-                let baseName = fileName.deletingPathExtension
-                let ext = fileName.pathExtension
+                let nsFileName = fileName as NSString
+                let baseName = nsFileName.deletingPathExtension
+                let ext = nsFileName.pathExtension
                 let newName = baseName + "_imported." + ext
                 destPath = destinationDir.appendingPathComponent(newName)
             }
