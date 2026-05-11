@@ -469,16 +469,21 @@ BOOL canAppOpenItself(NSURL* url) {
                 // Convert the base64 encoded url into String
                 NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:realUrlEncoded options:0];
                 decodedUrlStr = [[NSString alloc] initWithData:decodedData encoding:NSUTF8StringEncoding];
-            } else if([urlStr hasPrefix:NSUserDefaults.lcAppUrlScheme]) {
-                context.payload = nil;
-                context.actions = nil;
             }
         } while (0);
     }
     
+    BOOL urlDecodeSuccess = NO;
     do {
         if(!decodedUrlStr) break;
         NSURL* decodedUrl = [NSURL URLWithString:decodedUrlStr];
+        if(![[[decodedUrl scheme] lowercaseString] isEqualToString:@"https"] &&
+           !canAppOpenItself(decodedUrl) &&
+           ![[[decodedUrl scheme] lowercaseString] isEqualToString:@"http"]
+        ) {
+            break;
+        }
+        urlDecodeSuccess = YES;
         
         NSMutableDictionary* newDict = [context.payload mutableCopy];
         if(!newDict) newDict = [NSMutableDictionary new];
@@ -505,6 +510,11 @@ BOOL canAppOpenItself(NSURL* url) {
         context.actions = newActions;
         
     } while(0);
+    
+    if(!urlDecodeSuccess) {
+        context.payload = nil;
+        context.actions = nil;
+    }
     
 #endif
     [self hook__connectUISceneFromFBSScene:scene transitionContext:context];
