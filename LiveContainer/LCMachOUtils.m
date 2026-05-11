@@ -184,7 +184,8 @@ int LCPatchExecSlice(const char *path, struct mach_header_64 *header, bool doInj
             case LC_LOAD_DYLIB:
             case LC_LOAD_WEAK_DYLIB:
             case LC_REEXPORT_DYLIB:
-            case LC_LOAD_UPWARD_DYLIB: {
+            case LC_LOAD_UPWARD_DYLIB:
+            case LC_LAZY_LOAD_DYLIB: {
                 char* loadPath = (void *)command2 +
     ((struct dylib_command*)command2)->dylib.name.offset;
 
@@ -201,33 +202,43 @@ const char* newPath = NULL;
 
 if (loadPath) {
 
-    if (strncmp(loadPath,
-        "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
-        63) == 0) {
+    if (strcmp(loadPath,
+        "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
 
         newPath =
         "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
     }
 
-    else if (strncmp(loadPath,
-        "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
-        74) == 0) {
+    else if (strcmp(loadPath,
+        "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
 
         newPath =
         "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
     }
 
-    else if (strncmp(loadPath,
-        "/usr/lib/libsubstrate.dylib",
-        29) == 0) {
+    else if (strcmp(loadPath,
+        "/usr/lib/libsubstrate.dylib") == 0) {
 
         newPath =
         "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
     }
 
-    else if (strncmp(loadPath,
-        "/usr/local/lib/libellekit.dylib",
-        35) == 0) {
+    else if (strcmp(loadPath,
+        "/usr/lib/libhooker.dylib") == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    else if (strcmp(loadPath,
+        "/usr/local/lib/libellekit.dylib") == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    else if (strcmp(loadPath,
+        "@rpath/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
 
         newPath =
         "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
@@ -239,11 +250,13 @@ if (loadPath) {
 
         if (newLen <= availableSize) {
 
-            // limpiar COMPLETAMENTE
             memset(loadPath, 0, availableSize);
 
-            // escribir nuevo path
             memcpy(loadPath, newPath, newLen);
+
+            NSLog(@"[LC] patched dylib path: %s -> %s",
+                  loadPath,
+                  newPath);
 
         } else {
 
