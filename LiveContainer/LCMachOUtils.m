@@ -185,7 +185,65 @@ int LCPatchExecSlice(const char *path, struct mach_header_64 *header, bool doInj
             case LC_LOAD_WEAK_DYLIB:
             case LC_REEXPORT_DYLIB:
             case LC_LOAD_UPWARD_DYLIB: {
-                char* loadPath =  (void *)command2 + ((struct dylib_command*)command2)->dylib.name.offset;
+                char* loadPath = (void *)command2 +
+    ((struct dylib_command*)command2)->dylib.name.offset;
+
+uint32_t cmdSize = ((struct dylib_command*)command2)->cmdsize;
+uint32_t nameOffset = ((struct dylib_command*)command2)->dylib.name.offset;
+
+uint32_t availableSize = cmdSize - nameOffset;
+
+const char* newPath = NULL;
+
+if (loadPath) {
+
+    if (strncmp(loadPath,
+                "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+                63) == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    else if (strncmp(loadPath,
+                     "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+                     74) == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    else if (strncmp(loadPath,
+                     "/usr/lib/libsubstrate.dylib",
+                     29) == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    else if (strncmp(loadPath,
+                     "/usr/local/lib/libellekit.dylib",
+                     35) == 0) {
+
+        newPath =
+        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+    }
+
+    if (newPath) {
+
+        size_t newLen = strlen(newPath) + 1;
+
+        if (newLen <= availableSize) {
+
+            memset(loadPath, 0, availableSize);
+            memcpy(loadPath, newPath, newLen);
+
+        } else {
+
+            NSLog(@"[LC] replacement path too long");
+        }
+    }
+}
                 for ( int i = 0; i < depCount; ++i ) {
                     if ( strcmp(loadPath, depPaths[i]) == 0 ) {
                         // replace this duplicated dylib command with an invalid command number
