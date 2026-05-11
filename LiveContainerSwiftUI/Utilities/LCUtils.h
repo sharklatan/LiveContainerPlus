@@ -44,10 +44,6 @@ int dyld_get_program_sdk_version(void);
 + (NSData*)bookmarkForURL:(NSURL*) url;
 @end
 
-@interface NSUserDefaults(LiveContainer)
-+ (bool)sideStoreExist;
-@end
-
 @interface LCP12CertHelper : NSObject
 
 - (instancetype)initWithP12Data:(NSData*)p12Data password:(NSString*)password error:(NSError**)error;

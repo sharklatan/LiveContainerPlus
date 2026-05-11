@@ -8,6 +8,17 @@ import Intents
         application.shortcutItems = nil
         UserDefaults.standard.removeObject(forKey: "LCNeedToAcquireJIT")
         
+        // Patch bundled ElleKit LC_ID on first run
+        let userDefaults = UserDefaults.standard
+        if !userDefaults.bool(forKey: "LCElleKitPatched") {
+            let elleKitPath = Bundle.main.builtInPlugInsPath.appending("/CydiaSubstrate.framework/CydiaSubstrate")
+            if FileManager.default.fileExists(atPath: elleKitPath) {
+                let patched = LCTweakPatcher.patchDylibLCID(elleKitPath, newID: "@rpath/CydiaSubstrate.framework/CydiaSubstrate")
+                NSLog("[LC] ElleKit LC_ID patching: %@", patched ? "SUCCESS" : "FAILED")
+                userDefaults.set(true, forKey: "LCElleKitPatched")
+            }
+        }
+        
         NotificationCenter.default.addObserver(forName: UIApplication.willTerminateNotification, object: nil, queue: .main) { _ in
             // Fix launching app if user opens JIT waiting dialog and kills the app. Won't trigger normally.
             if DataManager.shared.model.isJITModalOpen && !UserDefaults.standard.bool(forKey: "LCKeepSelectedWhenQuit"){

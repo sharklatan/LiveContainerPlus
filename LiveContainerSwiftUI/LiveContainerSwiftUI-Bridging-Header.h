@@ -16,5 +16,8 @@
 #include "../MultitaskSupport/PiPManager.h"
 #include "../MultitaskSupport/VirtualWindowsHostView.h"
 #include "../LiveContainer/FoundationPrivate.h"
+#include "../LiveContainer/LCTweakPatcher.h"
+#include "../LiveContainer/LCDebExtractor.h"
 
 #endif /* LiveContainerSwiftUI_Bridging_Header_h_h */
+

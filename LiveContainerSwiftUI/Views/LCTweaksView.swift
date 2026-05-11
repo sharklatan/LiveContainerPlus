@@ -191,7 +191,7 @@ struct LCTweakFolderView : View {
                 renameFileInput.close(result: "")
             }
         )
-        .betterFileImporter(isPresented: $choosingTweak, types: [.dylib, .lcFramework, /*.deb*/], multiple: true, callback: { fileUrls in
+        .betterFileImporter(isPresented: $choosingTweak, types: [.dylib, .lcFramework, .deb], multiple: true, callback: { fileUrls in
             Task { await startInstallTweak(fileUrls) }
         }, onDismiss: {
             choosingTweak = false
@@ -327,14 +327,76 @@ struct LCTweakFolderView : View {
             // we will sign later before app launch
             
             for fileUrl in urls {
-                // handle deb file
+                // handle file
                 if(!fileUrl.isFileURL) {
                     throw "lc.tweakView.notFileError %@".localizeWithFormat(fileUrl.lastPathComponent)
                 }
+                
+                // Handle .deb files
+                if fileUrl.lastPathComponent.hasSuffix(".deb") {
+                    var error: NSError?
+                    let extractedDylibs = LCDebExtractor.extractDylibs(fromDeb: fileUrl.path, error: &error)
+                    
+                    if let error = error {
+                        throw error
+                    }
+                    
+                    guard let extractedDylibs = extractedDylibs, !extractedDylibs.isEmpty else {
+                        throw "No dylibs found in .deb package: \(fileUrl.lastPathComponent)"
+                    }
+                    
+                    // Create folder for this deb package
+                    let debName = fileUrl.lastPathComponent.replacingOccurrences(of: ".deb", with: "")
+                    let debFolderPath = self.baseUrl.appendingPathComponent(debName)
+                    
+                    if !fm.fileExists(atPath: debFolderPath.path) {
+                        try fm.createDirectory(at: debFolderPath, withIntermediateDirectories: false)
+                    }
+                    
+                    // Process each extracted dylib
+                    for extractedDylib in extractedDylibs {
+                        let dylibPath = debFolderPath.appendingPathComponent(extractedDylib.name).path
+                        try extractedDylib.data.write(toFile: dylibPath, options: .atomic)
+                        
+                        // Patch substrate references
+                        let patchedSubstrate = LCTweakPatcher.patchTweakMachOSubstrateReferences(dylibPath)
+                        NSLog("[LC] Tweaks import: patched substrate refs: %@, path: %@", patchedSubstrate ? "YES" : "NO", dylibPath)
+                        
+                        // Add rpath if needed
+                        LCParseMachO((dylibPath as NSString).utf8String, false) { path, header, _, _ in
+                            LCPatchAddRPath(path, header)
+                        }
+                    }
+                    
+                    // Copy ElleKit framework if needed
+                    let elleKitFramework = Bundle.main.builtInPlugInsPath.appending("/CydiaSubstrate.framework")
+                    let destFramework = debFolderPath.appendingPathComponent("CydiaSubstrate.framework")
+                    if fm.fileExists(atPath: elleKitFramework) && !fm.fileExists(atPath: destFramework.path) {
+                        do {
+                            try fm.copyItem(atPath: elleKitFramework, toPath: destFramework.path)
+                            NSLog("[LC] Copied ElleKit framework to tweak folder")
+                        } catch {
+                            NSLog("[LC] Warning: Failed to copy ElleKit framework: %@", error.localizedDescription)
+                        }
+                    }
+                    
+                    self.tweakItems.append(LCTweakItem(fileUrl: debFolderPath, isFolder: true, isFramework: false, isTweak: false))
+                    continue
+                }
+                
+                // Handle regular .dylib and .framework files
                 let toPath = self.baseUrl.appendingPathComponent(fileUrl.lastPathComponent)
                 try fm.moveItem(at: fileUrl, to: toPath)
+                
+                // Patch substrate references
+                if fileUrl.lastPathComponent.hasSuffix(".dylib") {
+                    let patchedSubstrate = LCTweakPatcher.patchTweakMachOSubstrateReferences(toPath.path)
+                    NSLog("[LC] Tweaks import: patched substrate refs: %@, path: %@", patchedSubstrate ? "YES" : "NO", toPath.path)
+                }
+                
+                // Add rpath for runtime resolution
                 LCParseMachO((toPath.path as NSString).utf8String, false) { path, header, _, _ in
-                    LCPatchAddRPath(path, header);
+                    LCPatchAddRPath(path, header)
                 }
 
                 let isFramework = toPath.lastPathComponent.hasSuffix(".framework")
