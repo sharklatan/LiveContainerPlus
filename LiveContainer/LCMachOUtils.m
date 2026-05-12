@@ -199,49 +199,25 @@ uint32_t availableSize =
     cmdSize - nameOffset;
 
 const char* newPath = NULL;
+const char* badPaths[] = {
+    "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+    "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
+    "/usr/lib/libsubstrate.dylib",
+    "/usr/lib/libhooker.dylib",
+    "/usr/local/lib/libellekit.dylib",
+    "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
+};
 
-if (loadPath) {
-
-    if (strcmp(loadPath,
-        "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
-    }
-
-    else if (strcmp(loadPath,
-        "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
-    }
-
-    else if (strcmp(loadPath,
-        "/usr/lib/libsubstrate.dylib") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
-    }
-
-    else if (strcmp(loadPath,
-        "/usr/lib/libhooker.dylib") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
-    }
-
-    else if (strcmp(loadPath,
-        "/usr/local/lib/libellekit.dylib") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
-    }
-
-    else if (strcmp(loadPath,
-        "@rpath/CydiaSubstrate.framework/CydiaSubstrate") == 0) {
-
-        newPath =
-        "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+if (loadPath && availableSize > 0) {
+    for (int pathIdx = 0; pathIdx < 6; pathIdx++) {
+        const char* badPath = badPaths[pathIdx];
+        size_t badLen = strlen(badPath);
+        
+        if (availableSize >= badLen && 
+            strncmp(loadPath, badPath, badLen) == 0) {
+            newPath = "@loader_path/CydiaSubstrate.framework/CydiaSubstrate";
+            break;
+        }
     }
 
     if (newPath) {
