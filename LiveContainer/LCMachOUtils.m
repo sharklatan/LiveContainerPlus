@@ -218,7 +218,20 @@ int LCPatchExecSlice(const char *path, struct mach_header_64 *header, bool doInj
                         memcpy(loadPath, newPath, newLen);
                         NSLog(@"[LC] patched dylib path: %s -> %s", loadPath, newPath);
                     } else {
-                        NSLog(@"[LC] replacement path too long");
+                        // replacement doesn't fit in-place: try to append a new load command
+                        uint8_t *endOfLoadCmds = (uint8_t*)header + sizeof(struct mach_header_64) + header->sizeofcmds;
+                        uint8_t *textStart = (uint8_t*)header + textSectionOffest;
+                        long freeSpace = (long)(textStart - endOfLoadCmds);
+                        size_t newCmdSize = sizeof(struct dylib_command) + rnd32((uint32_t)strlen(newPath) + 1, 8);
+                        if (freeSpace >= (long)newCmdSize) {
+                            insertDylibCommand(LC_LOAD_DYLIB, newPath, header);
+                            // mark the old command as invalid to avoid duplicates
+                            patchCmd->cmd = 0x114515;
+                            NSLog(@"[LC] appended new dylib command and invalidated old one: %s", newPath);
+                            // After insertion the load commands area changed. Stop processing this command.
+                        } else {
+                            NSLog(@"[LC] replacement path too long and no space to append new command");
+                        }
                     }
                 }
             }
