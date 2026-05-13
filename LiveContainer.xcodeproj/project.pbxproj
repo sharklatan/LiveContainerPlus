@@ -12,6 +12,7 @@
 		174140902D9C0E8200F3F928 /* TweakLoader.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 1741403A2D9C0D0000F3F928 /* TweakLoader.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		174140942D9C0E8200F3F928 /* ZSign.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 174140542D9C0D6D00F3F928 /* ZSign.dylib */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
 		174140BA2D9C0F9100F3F928 /* TestJITLess.dylib in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 174140AD2D9C0F4100F3F928 /* TestJITLess.dylib */; };
+		174140FB2D9C1EDA00F3F928 /* LiveContainerShared.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = E1292BD62DCA3B660065E12D /* LiveContainerShared.framework */; };
 		174140D62D9C176F00F3F928 /* libarchive.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = 174140D52D9C176700F3F928 /* libarchive.tbd */; };
 		17554B732DA16988004C6D90 /* OpenSSL.xcframework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 17554B712DA16988004C6D90 /* OpenSSL.xcframework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		17554B742DA169AA004C6D90 /* OpenSSL.xcframework in Frameworks */ = {isa = PBXBuildFile; fileRef = 17554B712DA16988004C6D90 /* OpenSSL.xcframework */; };
@@ -349,6 +350,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				174140FB2D9C1EDA00F3F928 /* LiveContainerShared.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -585,6 +587,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				174140FC2D9C1EDA00F3F928 /* PBXTargetDependency */,
 			);
 			name = TweakLoader;
 			packageProductDependencies = (
@@ -1035,6 +1038,11 @@
 			isa = PBXTargetDependency;
 			target = 174140392D9C0D0000F3F928 /* TweakLoader */;
 			targetProxy = 174140FD2D9C1EDA00F3F928 /* PBXContainerItemProxy */;
+		};
+		174140FC2D9C1EDA00F3F928 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1292BD52DCA3B660065E12D /* LiveContainerShared */;
+			targetProxy = E1292BE92DCA3B670065E12D /* PBXContainerItemProxy */;
 		};
 		174141002D9C1EDA00F3F928 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
