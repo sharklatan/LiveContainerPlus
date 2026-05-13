@@ -3,13 +3,24 @@
 #include <dlfcn.h>
 #include <objc/runtime.h>
 #include "utils.h"
+#import "../LiveContainer/Tweaks/Tweaks.h"
 
 static NSString *loadTweakAtURL(NSURL *url) {
     NSString *tweakPath = url.path;
     NSString *tweak = tweakPath.lastPathComponent;
-    if (![tweakPath hasSuffix:@".dylib"] && ![tweakPath hasSuffix:@".framework"]) {
+    
+    // Aceptar .dylib, .framework y .bundle
+    if (![tweakPath hasSuffix:@".dylib"] && ![tweakPath hasSuffix:@".framework"] && ![tweakPath hasSuffix:@".bundle"]) {
         return nil;
     }
+    
+    // Si es .bundle, registrarlo en el bundle registry pero no cargar como dylib
+    if ([tweakPath hasSuffix:@".bundle"]) {
+        registerTweakBundle(tweak, tweakPath);
+        return nil;
+    }
+    
+    // Si es .framework, extraer el ejecutable
     if ([tweakPath hasSuffix:@".framework"]) {
         NSURL* infoPlistURL = [url URLByAppendingPathComponent:@"Info.plist"];
         NSDictionary* infoDict = [NSDictionary dictionaryWithContentsOfURL:infoPlistURL];
@@ -58,7 +69,8 @@ static void showDlerrAlert(NSString *error) {
 static void TweakLoaderConstructor() {
     const char *tweakFolderC = getenv("LC_GLOBAL_TWEAKS_FOLDER");
     NSString *globalTweakFolder = @(tweakFolderC);
-    unsetenv("LC_GLOBAL_TWEAKS_FOLDER");
+    // NO removemos LC_GLOBAL_TWEAKS_FOLDER porque hooks posteriores lo necesitan
+    // unsetenv("LC_GLOBAL_TWEAKS_FOLDER");
     
     if([NSUserDefaults.guestAppInfo[@"dontInjectTweakLoader"] boolValue]) {
         // don't load any tweak since tweakloader is loaded after all initializers
