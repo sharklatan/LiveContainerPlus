@@ -88,9 +88,8 @@ void LCPatchAddRPath(const char *path, struct mach_header_64 *header) {
 void LCPatchTweakDylibReferences(struct mach_header_64 *header) {
     if (!header) return;
 
-    uint8_t *imageHeaderPtr = (uint8_t*)header + sizeof(struct mach_header_64);
-    struct load_command *patchCmd = (struct load_command *)imageHeaderPtr;
-    
+    struct load_command *patchCmd = (struct load_command *)((uint8_t *)header + sizeof(struct mach_header_64));
+
     const char* badPaths[] = {
         "/Library/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
         "@executable_path/Frameworks/CydiaSubstrate.framework/CydiaSubstrate",
@@ -100,40 +99,30 @@ void LCPatchTweakDylibReferences(struct mach_header_64 *header) {
         "@rpath/CydiaSubstrate.framework/CydiaSubstrate"
     };
 
-    for (int i = 0; i < header->ncmds; i++) {
+    for (uint32_t i = 0; i < header->ncmds; i++) {
         if (patchCmd->cmd == LC_LOAD_DYLIB || patchCmd->cmd == LC_LOAD_WEAK_DYLIB ||
             patchCmd->cmd == LC_REEXPORT_DYLIB || patchCmd->cmd == LC_LOAD_UPWARD_DYLIB ||
             patchCmd->cmd == LC_LAZY_LOAD_DYLIB) {
 
             struct dylib_command *dylib = (struct dylib_command *)patchCmd;
-            char* loadPath = (void *)dylib + dylib->dylib.name.offset;
+            char *loadPath = (void *)dylib + dylib->dylib.name.offset;
 
             if (loadPath) {
                 for (int pathIdx = 0; pathIdx < 6; pathIdx++) {
-                    const char* badPath = badPaths[pathIdx];
+                    const char *badPath = badPaths[pathIdx];
                     size_t badLen = strlen(badPath);
 
                     if (strncmp(loadPath, badPath, badLen) == 0) {
-                        // Convert strong load to weak load so CydiaSubstrate dependency is optional
-                        // CydiaSubstrate is already loaded globally by TweakLoader
-                        if (patchCmd->cmd == LC_LOAD_DYLIB) {
+                        if (patchCmd->cmd != LC_LOAD_WEAK_DYLIB) {
                             patchCmd->cmd = LC_LOAD_WEAK_DYLIB;
                             NSLog(@"[LC] converted to weak dylib: %s", loadPath);
-                        } else if (patchCmd->cmd == LC_REEXPORT_DYLIB) {
-                            patchCmd->cmd = LC_LOAD_WEAK_DYLIB;
-                            NSLog(@"[LC] converted REEXPORT to weak dylib: %s", loadPath);
-                        } else if (patchCmd->cmd == LC_LOAD_UPWARD_DYLIB) {
-                            patchCmd->cmd = LC_LOAD_WEAK_DYLIB;
-                            NSLog(@"[LC] converted UPWARD to weak dylib: %s", loadPath);
-                        } else if (patchCmd->cmd == LC_LAZY_LOAD_DYLIB) {
-                            patchCmd->cmd = LC_LOAD_WEAK_DYLIB;
-                            NSLog(@"[LC] converted LAZY to weak dylib: %s", loadPath);
                         }
                         break;
                     }
                 }
             }
         }
+
         patchCmd = (struct load_command *)((void *)patchCmd + patchCmd->cmdsize);
     }
 }
@@ -228,7 +217,6 @@ int LCPatchExecSlice(const char *path, struct mach_header_64 *header, bool doInj
     
     // Patch CydiaSubstrate references (must be done after insertDylibCommand calls)
     LCPatchTweakDylibReferences(header);
-    imageHeaderPtr = (uint8_t*)header + sizeof(struct mach_header_64);
     
     // Ensure No duplicated dylibs, often caused by incorrect tweak injection
     // https://github.com/LiveContainer/LiveContainer/issues/582
