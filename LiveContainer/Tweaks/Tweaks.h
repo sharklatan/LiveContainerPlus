@@ -15,6 +15,9 @@ void NSFMGuestHooksInit(void);
 void initDead10ccFix(void);
 void IDFVHookInit(NSUUID* uuid);
 
+// Bundle registry function
+void registerTweakBundle(NSString *bundleName, NSString *bundlePath);
+
 @interface NSBundle(LiveContainer)
 - (instancetype)initWithPathForMainBundle:(NSString *)path;
 @end
