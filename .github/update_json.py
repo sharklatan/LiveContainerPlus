@@ -41,6 +41,17 @@ def get_file_size(url):
         print(f"Error getting file size: {e}")
         return 194586
 
+
+def load_source_json(repo_url, asset_name, local_path):
+    apps_json_url = f"https://github.com/{repo_url}/releases/download/1.0/{asset_name}"
+    try:
+        response = requests.get(apps_json_url)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, json.JSONDecodeError):
+        with open(local_path, "r") as file:
+            return json.load(file)
+
 def update_json_file_release(repo_url, json_file, latest_release):
     if isinstance(latest_release, list) and latest_release:
         latest_release = latest_release[0]
@@ -48,15 +59,7 @@ def update_json_file_release(repo_url, json_file, latest_release):
         print("Error getting latest release")
         return
 
-    try:
-        apps_json_url = f"https://github.com/{repo_url}/releases/download/1.0/apps.json"
-        response = requests.get(apps_json_url)
-        response.raise_for_status()
-        data = response.json()
-    except json.JSONDecodeError as e:
-        print(f"Error reading JSON file: {e}")
-        data = {"apps": []}
-        raise
+    data = load_source_json(repo_url, "apps.json", json_file)
 
     app = data["apps"][0]
 
@@ -117,11 +120,11 @@ def update_json_file_release(repo_url, json_file, latest_release):
         "caption": f"Update of LiveContainer just got released!",
         "date": latest_release["published_at"],
         "identifier": news_identifier,
-        "imageURL": "https://raw.githubusercontent.com/LiveContainer/LiveContainer/main/screenshots/release.png",
+        "imageURL": "https://raw.githubusercontent.com/sharklatan/LiveContainerPlus/main/screenshots/release.png",
         "notify": True,
         "tintColor": "#0784FC",
         "title": f"{full_version} - LiveContainer  {date_string}",
-        "url": f"https://github.com/LiveContainer/LiveContainer/releases/tag/{tag}"
+        "url": f"https://github.com/{repo_url}/releases/tag/{tag}"
     }
 
     news_entry_exists = any(item["identifier"] == news_identifier for item in data["news"])
@@ -136,7 +139,7 @@ def update_json_file_release(repo_url, json_file, latest_release):
         print(f"Error writing to JSON file: {e}")
         raise
 
-def update_json_file_nightly(json_file, nightly_release):
+def update_json_file_nightly(repo_url, json_file, nightly_release):
     if isinstance(nightly_release, list) and nightly_release:
         nightly_release = next((item for item in nightly_release if item["tag_name"] == "nightly"), None)
     else:
@@ -166,7 +169,7 @@ def update_json_file_nightly(json_file, nightly_release):
     commit_msg = os.environ.get("commit_msg", "").strip()
 
     description = f"""\
-Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer/commit/{commit_sha}):\
+Nightly build from [{commit_sha}](https://github.com/{repo_url}/commit/{commit_sha}):\
  {commit_msg}
 
 This is a nightly release [created automatically with GitHub Actions workflow]({nightly_link}).
@@ -226,15 +229,7 @@ def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_night
         print("Error getting latest release")
         return
 
-    try:
-        apps_json_url = f"https://github.com/{repo_url}/releases/download/1.0/apps_ss_lc.json"
-        response = requests.get(apps_json_url)
-        response.raise_for_status()
-        data = response.json()
-    except json.JSONDecodeError as e:
-        print(f"Error reading JSON file: {e}")
-        data = {"apps": []}
-        raise
+    data = load_source_json(repo_url, "apps_ss_lc.json", json_file)
 
     app = data["apps"][0]
 
@@ -251,7 +246,7 @@ def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_night
     commit_msg = os.environ.get("commit_msg", "").strip()
 
     description = f"""\
-Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer/commit/{commit_sha}):\
+Nightly build from [{commit_sha}](https://github.com/{repo_url}/commit/{commit_sha}):\
  {commit_msg}
     """
     assets = latest_release.get("assets", [])
@@ -306,22 +301,28 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
             "caption": f"Update of LiveContainer just got released!",
             "date": latest_release["published_at"],
             "identifier": news_identifier,
-            "imageURL": "https://raw.githubusercontent.com/LiveContainer/LiveContainer/main/screenshots/release.png",
+            "imageURL": "https://raw.githubusercontent.com/sharklatan/LiveContainerPlus/main/screenshots/release.png",
             "notify": True,
             "tintColor": "#0784FC",
             "title": f"{full_version} - LiveContainer  {date_string}",
-            "url": f"https://github.com/LiveContainer/LiveContainer/releases/tag/{tag}"
+            "url": f"https://github.com/{repo_url}/releases/tag/{tag}"
         }
 
         news_entry_exists = any(item["identifier"] == news_identifier for item in data["news"])
         if not news_entry_exists:
             data["news"].append(news_entry)
     else:
+        app["versions"] = [version_entry]
+        app.update({
+            "version": version,
+            "versionDate": version_date,
+            "versionDescription": description,
+            "downloadURL": download_url,
+            "size": size
+        })
         channels = app['releaseChannels']
         for channel in channels:
-            if channel['track'] != 'nightly':
-                continue
-            channel['releases'] = [version_entry]
+            channel['releases'] = [version_entry] if channel['track'] == 'nightly' else []
     try:
         with open(json_file, "w") as file:
             json.dump(data, file, indent=2)
@@ -332,14 +333,14 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
 
 
 def main():
-    repo_url = "LiveContainer/LiveContainer"
+    repo_url = "sharklatan/LiveContainerPlus"
     is_nightly = "NIGHTLY_LINK" in os.environ
 
     try:
         fetched_data_latest = fetch_latest_release(repo_url, is_nightly)
         if is_nightly:
             json_file = "./.github/apps_nightly.json"
-            update_json_file_nightly(json_file, fetched_data_latest)
+            update_json_file_nightly(repo_url, json_file, fetched_data_latest)
             update_json_file_release_ss_lc(repo_url, "./.github/apps_ss_lc.json", fetched_data_latest, True)
         else:
             json_file = "./.github/apps.json"
