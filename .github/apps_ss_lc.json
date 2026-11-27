@@ -1,16 +1,16 @@
 {
-  "name": "LiveContainer + SideStore",
+  "name": "LiveContainer + SideStore Plus",
   "identifier": "com.livecontainer.source",
   "website": "https://github.com/sharklatan/LiveContainerPlus",
-  "subtitle": "LiveContainer official AltStore Source.",
-  "description": "This is the official AltStore Source for LiveContainer.\n\n Run iOS apps without actually installing them!",
+  "subtitle": "Sharklatan Plus update source.",
+  "description": "Updates for the Sharklatan LiveContainer and SideStore Plus combined build.",
   "tintColor": "#0784FC",
   "iconURL": "https://raw.githubusercontent.com/sharklatan/LiveContainerPlus/main/screenshots/AppIcon1024.png",
   "headerURL": "https://raw.githubusercontent.com/sharklatan/LiveContainerPlus/main/screenshots/header.png",
   "apps": [
     {
       "beta": false,
-      "name": "LiveContainer + SideStore",
+      "name": "LiveContainer + SideStore Plus",
       "bundleIdentifier": "com.kdt.livecontainer",
       "developerName": "LiveContainer Team",
       "subtitle": "Run iOS apps without actually installing them!",

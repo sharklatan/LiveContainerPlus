@@ -222,6 +222,33 @@ This is a nightly release [created automatically with GitHub Actions workflow]({
         print(f"Error writing to JSON file: {e}")
         raise
 
+SS_LC_TITLE = "LiveContainer + SideStore Plus"
+
+
+def apply_ss_lc_branding(data, repo_url, release):
+    data.update({
+        "name": SS_LC_TITLE,
+        "website": f"https://github.com/{repo_url}",
+        "subtitle": "Sharklatan Plus update source.",
+        "description": "Updates for the Sharklatan LiveContainer and SideStore Plus combined build."
+    })
+    app = data["apps"][0]
+    app["name"] = SS_LC_TITLE
+    tag = release["tag_name"]
+    data["news"] = [{
+        "appID": "com.kdt.livecontainer",
+        "caption": "A new Sharklatan Plus combined build is available.",
+        "date": release["published_at"],
+        "identifier": f"sharklatan-plus-{tag}-{release['id']}",
+        "imageURL": "https://raw.githubusercontent.com/sharklatan/LiveContainerPlus/main/screenshots/release.png",
+        "notify": True,
+        "tintColor": "#0784FC",
+        "title": SS_LC_TITLE,
+        "url": f"https://github.com/{repo_url}/releases/tag/{tag}"
+    }]
+    return app
+
+
 def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_nightly: bool):
     if isinstance(latest_release, list) and latest_release:
         latest_release = latest_release[0]
@@ -231,7 +258,7 @@ def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_night
 
     data = load_source_json(repo_url, "apps_ss_lc.json", json_file)
 
-    app = data["apps"][0]
+    app = apply_ss_lc_branding(data, repo_url, latest_release)
 
     with open("LiveContainer/Info.plist", 'rb') as infile:
         info_plist = plistlib.load(infile)
